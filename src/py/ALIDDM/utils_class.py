@@ -107,8 +107,11 @@ class Agent(nn.Module):
 
             img_lst = torch.cat((img_lst,y.unsqueeze(0)),dim=0)
         img_batch =  img_lst.permute(1,0,2,3,4)
+        
+        image_display = img_batch[0,:,:-1,:,:]
 
-        self.image_writer.add_image('image',img_batch)
+        # print(image_display.shape)
+        self.image_writer.add_images('image',image_display)
 
         x = img_batch
         x = self.features_net(x)
@@ -141,9 +144,9 @@ class Agent(nn.Module):
 
     def search(self,meshes,min_variance):
         while not self.found(min_variance):
-            x = self(meshes)  #[batchsize,time_steps,3,224,224]
+            x,img_batch = self(meshes)  #[batchsize,time_steps,3,224,224]
             delta_pos =  x[...,0:3]
-            delta_pos += self.sphere_centers
+            delta_pos = delta_pos + self.sphere_centers
             # self.set_radius(x[...,3:4].clone().detach()) 
             new_coord = delta_pos.detach().clone()
             self.position_center_memory.append(new_coord.cpu().numpy())

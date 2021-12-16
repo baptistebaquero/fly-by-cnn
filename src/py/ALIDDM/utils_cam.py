@@ -459,7 +459,7 @@ def Accuracy(agents,test_dataloader,agents_ids,min_variance,loss_function,device
                 lm_pos = torch.empty((0)).to(device)
                 for lst in LP:
                     lm_pos = torch.cat((lm_pos,lst[aid].unsqueeze(0)),dim=0)  #[batchsize,3]
-                                # center_mesh = generate_sphere_mesh(pos_center[0],radius,device,0.9)
+                    # center_mesh = generate_sphere_mesh(pos_center[0],radius,device,0.9)
                 
                 perfect_pos,verts_teeth,faces_teeth,verts_rgb = generate_sphere_mesh(lm_pos[0],radius,device,0.0)
                 dic = {"teeth_mesh": meshes, 'landmark':perfect_pos}
