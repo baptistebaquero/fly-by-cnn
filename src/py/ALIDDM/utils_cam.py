@@ -211,7 +211,7 @@ def Training(epoch, agents, agents_ids, num_step, train_dataloader, loss_functio
 
                     # dic = {"teeth_mesh": meshes}
                     # plot_fig(dic)
-                    x = agents[aid](meshes)  #[batchsize,time_steps,3,224,224]
+                    x , img_batch = agents[aid](meshes)  #[batchsize,time_steps,3,224,224]
 
                     x = x + agents[aid].sphere_centers
                     #f_i = G*m_1*m_2/(loss_function(x, lm_pos) + epsilon) 
@@ -265,7 +265,7 @@ def Validation(epoch,agents,agents_ids,validation_dataloader,num_step,loss_funct
                         print('---------- step :', i,'----------')
                         meshes = merge_meshes(agents[aid],V,F,CN,device)
 
-                        x = agents[aid](meshes)  #[batchsize,time_steps,3,224,224]
+                        x , img_batch = agents[aid](meshes)  #[batchsize,time_steps,3,224,224]
                         
                         # delta_pos =  x[...,0:3]
                         
@@ -276,6 +276,9 @@ def Validation(epoch,agents,agents_ids,validation_dataloader,num_step,loss_funct
                         # agents[aid].sphere_centers = delta_pos.detach().clone()
                         x = x + agents[aid].sphere_centers
                         agents[aid].sphere_centers = x.clone().detach()
+                        
+                image_display = img_batch[0,:,:-1,:,:]
+                agents[aid].image_writer.add_images('image',image_display,epoch)
 
                 aid_loss = loss_function(x, lm_pos)
                 

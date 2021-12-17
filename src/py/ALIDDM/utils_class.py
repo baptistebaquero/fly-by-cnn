@@ -19,7 +19,7 @@ import os
 from torch.utils.tensorboard import SummaryWriter
 
 class Agent(nn.Module):
-    def __init__(self, renderer, features_net, aid, device,image_run_folder = "",run_folder = "",min_radius=0.5,max_radius=2.5,sl=1,lenque = 10):
+    def __init__(self, renderer, features_net, aid, device,image_run_folder = "",run_folder = "",min_radius=0.5,max_radius=2.5,sl=1,lenque = 15):
         super(Agent, self).__init__()
         self.renderer = renderer
         self.device = device
@@ -115,7 +115,7 @@ class Agent(nn.Module):
         x = self.delta_move(x)
         x = self.tanh(x)
 
-        return x        
+        return x , img_batch       
 
 
     def trainable(self, train = False):
@@ -141,7 +141,10 @@ class Agent(nn.Module):
     def search(self,meshes,min_variance):
         while not self.found(min_variance):
             x,img_batch = self(meshes)  #[batchsize,time_steps,3,224,224]
-            delta_pos =  x[...,0:3]
+            delta_pos =  x
+            # print(delta_pos)
+            # print(self.sphere_centers)
+            delta_pos =  delta_pos + self.sphere_centers
             delta_pos = delta_pos + self.sphere_centers
             # self.set_radius(x[...,3:4].clone().detach()) 
             new_coord = delta_pos.detach().clone()
