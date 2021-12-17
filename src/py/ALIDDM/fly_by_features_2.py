@@ -27,7 +27,7 @@ import random
 def main(args):  
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    cameras = FoVPerspectiveCameras(device=device) # Initialize a perspective camera.
+    cameras = FoVPerspectiveCameras(znear=args.znear,zfar=args.zfar, fov=args.fov,device=device) # Initialize a perspective camera.
 
     raster_settings = RasterizationSettings(        
         image_size=args.image_size, 
@@ -47,7 +47,7 @@ def main(args):
         shader=HardPhongShader(device=device, cameras=cameras, lights=lights)
     )
     
-    output_dir = os.path.join(args.out, "best_nets")
+    # output_dir = os.path.join(args.out, "best_nets")
     # if not os.path.exists(output_dir):
     #     os.makedirs(output_dir)
 
@@ -58,9 +58,7 @@ def main(args):
     print(df_train.shape)
     print(df_val.shape)
     print(dt.shape)
-    # print(df_train)
-    # df_prediction = dataset(args.data_pred)
-
+    
     train_data = FlyByDataset(df_train,device, dataset_dir=args.dir, rotate=True)
     val_data = FlyByDataset(df_val,device , dataset_dir=args.dir, rotate=True)
     test_data = FlyByDataset(dt,device,dataset_dir=args.dir, rotate=False)
@@ -68,7 +66,6 @@ def main(args):
 
     train_dataloader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, collate_fn=pad_verts_faces)
     validation_dataloader = DataLoader(val_data, batch_size=args.batch_size, shuffle=False, collate_fn=pad_verts_faces)
-    
     test_dataloader = DataLoader(test_data, batch_size=1, shuffle=True, collate_fn=pad_verts_faces)
 
     learning_rate = 1e-4
@@ -97,48 +94,83 @@ def main(args):
         agents_ids = np.arange(args.num_agents)
         np.random.shuffle(agents_ids)
 
-        print('-------- TRAINING --------')          
-        print('---------- epoch :', epoch,'----------')
-        Training(epoch, agents, agents_ids, args.num_step, train_dataloader, loss_function, optimizer, device, args.batch_size)
+        # print('-------- TRAINING --------')          
+        # print('---------- epoch :', epoch,'----------')
+        # Training(epoch=epoch, 
+        #         agents=agents, 
+        #         agents_ids=agents_ids, 
+        #         num_step=args.num_step, 
+        #         train_dataloader=train_dataloader, 
+        #         loss_function=loss_function, 
+        #         optimizer=optimizer, 
+        #         device=device, 
+        #         batch_size=args.batch_size
+        #         )
 
         if (epoch) % args.test_interval == 0:
             print('-------- VALIDATION --------')
             print('---------- epoch :', epoch,'----------')
-            Validation(epoch,agents,agents_ids,validation_dataloader,args.num_step,loss_function,output_dir,early_stopping,device)
+            Validation(epoch=epoch,
+                    agents=agents,
+                    agents_ids=agents_ids,
+                    validation_dataloader=validation_dataloader,
+                    num_step=args.num_step,
+                    loss_function=loss_function,
+                    early_stopping=early_stopping,
+                    device=device
+                    )
             if early_stopping.early_stop == True :
                 print('-------- ACCURACY --------')
-                Accuracy(agents,test_dataloader,agents_ids,args.min_variance,loss_function,device)
-                break
+                Accuracy(agents=agents,
+                        test_dataloader=test_dataloader,
+                        agents_ids=agents_ids,
+                        min_variance = args.min_variance,
+                        loss_function=loss_function,
+                        device=device
+                        )
+
+            break
         
         if (epoch + 1) % args.num_epoch == 0:
             print('-------- ACCURACY --------')
-            Accuracy(agents,test_dataloader,agents_ids,args.min_variance,loss_function,device)
-
-
+            Accuracy(agents=agents,
+                    test_dataloader=test_dataloader,
+                    agents_ids=agents_ids,
+                    min_variance = args.min_variance,
+                    loss_function=loss_function,
+                    device=device
+                    )
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=' ', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    input_param = parser.add_argument_group('input files')
-    input_param.add_argument('--dir', type=str, help='dataset directory, if provided, it will be concatenated to the surf,landmarkrs file names', default='')
-    input_param.add_argument('--image_size',type=int, help='size of the picture', default=224)
-    input_param.add_argument('--blur_radius',type=int, help='blur raius', default=0)
-    input_param.add_argument('--faces_per_pixel',type=int, help='faces per pixels', default=1)
-    input_param.add_argument('--train_size',type=int, help='proportion of dat for training', default=0.9)
-    input_param.add_argument('--test',type=str, help='all the datas for testing', default='' )
-    input_param.add_argument('--batch_size',type=int, help='batch size', default=4)
-    input_param.add_argument('--test_interval',type=int, help='when we do a evaluation of the model', default=1)
-    input_param.add_argument('--run_folder',type=str, help='where you save tour run', default='./runs')
-    input_param.add_argument('--image_run_folder',type=str, help='where you save tour run', default='./image_runs')
-    input_param.add_argument('--min_variance',type=float, help='minimum of variance', default=0.01)
-    input_param.add_argument('--num_agents',type=int, help=' number of agents = number of maximum of landmarks in dataset', default=1)
-    input_param.add_argument('--num_step',type=int, help='number of step before to rich the landmark position',default=8)
-    input_param.add_argument('--num_epoch',type=int,help="numero epoch", required=True)
+    files_param = parser.add_argument_group('files')
+    files_param.add_argument('--dir', type=str, help='dataset directory, if provided, it will be concatenated to the surf,landmarkrs file names', default='')
+    files_param.add_argument('--test',type=str, help='dataset directory for testing', default='' )
+    files_param.add_argument('--run_folder',type=str, help='where you save tour run', default='./runs')
+    files_param.add_argument('--image_run_folder',type=str, help='where you save tour run', default='./image_runs')
+    files_param.add_argument('--out', type=str, help='place where model is saved', default='./training/')
 
-    output_param = parser.add_argument_group('output files')
-    output_param.add_argument('--out', type=str, help='place where model is saved', default='./training/')
-    # output_param.add_argument('--out', type=str, help='place where model is saved', default='/Users/luciacev-admin/Desktop/data_O')
+    rast_param = parser.add_argument_group('resterizer params')
+    rast_param.add_argument('--image_size',type=int, help='size of the picture', default=224)
+    rast_param.add_argument('--blur_radius',type=int, help='blur raius', default=0)
+    rast_param.add_argument('--faces_per_pixel',type=int, help='faces per pixels', default=1)
+    
+    cam_param = parser.add_argument_group('camera params')
+    cam_param.add_argument('--znear',type=int, help='znear parameter', default=0.1)
+    cam_param.add_argument('--zfar',type=int, help='zfar parameter', default=10)
+    cam_param.add_argument('--fov',type=int, help='fov parameter', default=120)
+
+    other_param = parser.add_argument_group('other parameters')
+    other_param.add_argument('--train_size',type=int, help='proportion of dat for training', default=0.9)
+    other_param.add_argument('--batch_size',type=int, help='batch size', default=4)
+    other_param.add_argument('--test_interval',type=int, help='when we do a evaluation of the model', default=1)
+    other_param.add_argument('--min_variance',type=float, help='minimum of variance', default=0.01)
+    other_param.add_argument('--num_agents',type=int, help=' number of agents = number of maximum of landmarks in dataset', default=1)
+    other_param.add_argument('--num_step',type=int, help='number of step before to rich the landmark position',default=3)
+    other_param.add_argument('--num_epoch',type=int,help="numero epoch", default=50)
+
 
     args = parser.parse_args()
     main(args)
