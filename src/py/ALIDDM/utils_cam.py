@@ -73,9 +73,8 @@ def dataset(data):
 
     return outfile
 
-def generate_sphere_mesh(center,radius,device,col):
+def generate_sphere_mesh(center,radius,device,color = [1,1,1]):
     sphereSource = vtk.vtkSphereSource()
-    # print(center)
     sphereSource.SetCenter(center[0],center[1],center[2])
     sphereSource.SetRadius(radius)
 
@@ -89,7 +88,16 @@ def generate_sphere_mesh(center,radius,device,col):
 
     verts_teeth,faces_teeth = PolyDataToTensors(vtk_landmarks.GetOutput())
 
-    verts_rgb = torch.ones_like(verts_teeth)[None]+col  # (1, V, 3)
+    verts_rgb = torch.ones_like(verts_teeth)[None]  # (1, V, 3)
+    # verts_rgb[:,0:] *= 0.1
+    verts_rgb[:,:, 0] *= color[0]  # red
+    verts_rgb[:,:, 1] *= color[1]  # green
+    verts_rgb[:,:, 2] *= color[2]  # blue
+
+
+    # verts_rgb[:,:2] *= 0
+
+
     # color_normals = ToTensor(dtype=torch.float32, device=self.device)(vtk_to_numpy(fbf.GetColorArray(surf, "Normals"))/255.0)
     textures = TexturesVertex(verts_features=verts_rgb.to(device))
     mesh = Meshes(
@@ -97,7 +105,7 @@ def generate_sphere_mesh(center,radius,device,col):
         faces=[faces_teeth],
         textures=textures).to(device)
     
-    return mesh,verts_teeth,faces_teeth,verts_rgb
+    return mesh,verts_teeth,faces_teeth,textures
 
 def merge_meshes(agents,V,F,CN,device):
     center_vert = torch.empty((0)).to(device)
@@ -107,7 +115,7 @@ def merge_meshes(agents,V,F,CN,device):
     for image in range(V.shape[0]):
         # print(agents[aid].sphere_centers[image])
         # print(agents[aid].sphere_centers[...,0])
-        center_mesh,agent_verts,agent_faces,textures= generate_sphere_mesh(agents.sphere_centers[image],0.02,device,0.9)
+        center_mesh,agent_verts,agent_faces,textures= generate_sphere_mesh(agents.sphere_centers[image],0.02,device)
         text = torch.ones_like(agent_verts).to(device)
         center_text = torch.cat((center_text,text.unsqueeze(0)),dim=0)
         center_vert = torch.cat((center_vert,agent_verts.to(device).unsqueeze(0)),dim=0)
@@ -146,6 +154,11 @@ def merge_meshes(agents,V,F,CN,device):
     )
     return meshes
 
+
+
+
+
+
 def Training(epoch, agents, agents_ids, num_step, train_dataloader, loss_function, optimizer, device, batch_size):#interval = 5
     # for batch, (V, F, CN, LP, MR, SF) in enumerate(train_dataloader):
         
@@ -176,15 +189,14 @@ def Training(epoch, agents, agents_ids, num_step, train_dataloader, loss_functio
         # batch_loss = 0
 
         batch_g_force = 0
-
         optimizer.zero_grad()
+        
         for aid in agents_ids: #aid == idlandmark_id
             print('---------- agents id :', aid,'----------')
             lm_pos = torch.empty((0)).to(device)
             for lst in LP:
                 lm_pos = torch.cat((lm_pos,lst[aid].unsqueeze(0)),dim=0)
             
-
             # if (epoch) % interval == 0:
             #     center_agent = torch.empty((0)).to(device)
             #     for lst in LP:
@@ -196,7 +208,7 @@ def Training(epoch, agents, agents_ids, num_step, train_dataloader, loss_functio
 
             NSteps = num_step
             A_i_gforce = 0
-        
+
             # agents[aid].trainable(True)
             # agents[aid].train()
             for radius in [1.5,0.8,0.5]:  
@@ -212,6 +224,9 @@ def Training(epoch, agents, agents_ids, num_step, train_dataloader, loss_functio
                     # dic = {"teeth_mesh": meshes}
                     # plot_fig(dic)
                     x , img_batch = agents[aid](meshes)  #[batchsize,time_steps,3,224,224]
+                    
+                    PlotMeshAndSpheres(meshes,agents[aid].sphere_centers,0.02,[1,0,0])
+                    PlotAgentViews(img_batch)
 
                     x = x + agents[aid].sphere_centers
                     #f_i = G*m_1*m_2/(loss_function(x, lm_pos) + epsilon) 
@@ -223,8 +238,8 @@ def Training(epoch, agents, agents_ids, num_step, train_dataloader, loss_functio
             
             print(f"agent {aid} force:", A_i_gforce.item())
             batch_g_force = batch_g_force + A_i_gforce
-            agents[aid].writer.add_scalar('force', batch_g_force, epoch)
-        
+         
+        agents[aid].writer.add_scalar('force', batch_g_force, epoch)
         batch_g_force = -1*batch_g_force # maximize
         batch_g_force.backward()   # backward propagation
         optimizer.step()   # tell the optimizer to update the weights according to the gradients and its internal optimisation strategy 
@@ -276,7 +291,7 @@ def Validation(epoch,agents,agents_ids,validation_dataloader,num_step,loss_funct
                         # agents[aid].sphere_centers = delta_pos.detach().clone()
                         x = x + agents[aid].sphere_centers
                         agents[aid].sphere_centers = x.clone().detach()
-                        
+
                 image_display = img_batch[0,:,:-1,:,:]
                 agents[aid].image_writer.add_images('image',image_display,epoch)
 
@@ -374,69 +389,6 @@ def Validation(epoch,agents,agents_ids,validation_dataloader,num_step,loss_funct
         #         torch.save(agents[0].features_net, os.path.join(output_dir, "best_feature_net.pth"))
 
         #     return early_stopping.early_stop
-
-def affichage(data_loader,phong_renderer):
-    for batch, (V, F, Y, F0, CN, IP,IL) in enumerate(data_loader):
-        textures = TexturesVertex(verts_features=CN)
-        meshes = Meshes(
-            verts=V,   
-            faces=F, 
-            textures=textures
-        )
-        
-        agent = Agent(meshes,phong_renderer)
-        list_pictures = agent.shot().to(device)
-        for pictures in list_pictures:
-            plt.imshow(pictures)
-            plt.show()
-
-def pad_verts_faces(batch):
-    verts = [v for v, f, cn, lp, sc, ma  in batch]
-    faces = [f for v, f, cn, lp, sc, ma  in batch]
-    color_normals = [cn for v, f, cn, lp, sc, ma, in batch]
-    landmark_position = [lp for v, f, cn, lp, sc, ma in batch]
-    scale_factor = [sc for v, f, cn, lp , sc, ma  in batch]
-    mean_arr = [ma for v, f, cn,lp, sc, ma   in batch]
-
-    return pad_sequence(verts, batch_first=True, padding_value=0.0), pad_sequence(faces, batch_first=True, padding_value=-1), pad_sequence(color_normals, batch_first=True, padding_value=0.), landmark_position, mean_arr, scale_factor
-
-def SavePrediction(data, outpath):
-    print("Saving prediction to : ", outpath)
-    img = data.numpy()
-    output = sitk.GetImageFromArray(img)
-    writer = sitk.ImageFileWriter()
-    writer.SetFileName(outpath)
-    writer.Execute(output)
-
-def pad_verts_faces_prediction(batch):
-    verts = [v for v, f, cn, ma , sc, ps in batch]
-    faces = [f for v, f, cn, ma , sc, ps in batch]
-    color_normals = [cn for v, f, cn, ma , sc, ps in batch]
-    mean_arr = [ma for v, f, cn, ma , sc, ps  in batch]
-    scale_factor = [sc for v, f, cn, ma , sc, ps in batch]
-    path_surf = [ps for v, f, cn, ma , sc,ps in batch]
-
-    return pad_sequence(verts, batch_first=True, padding_value=0.0), pad_sequence(faces, batch_first=True, padding_value=-1), pad_sequence(color_normals, batch_first=True, padding_value=0.), mean_arr, scale_factor, path_surf
-
-def plot_fig(dic):
-        radius_sphere = 0.1
-        # R, T = look_at_view_transform(self.distance, self.elevation, self.azimuth, device=self.device,degrees=False)
-        # cam_pos=torch.matmul(T,R)
-        # print(cam_pos)
-        # cam_pos = cam_pos.numpy()[0][0]
-        # cam_mesh = generate_sphere_mesh(cam_pos,radius_sphere,self.device)
-        # center_mesh = generate_sphere_mesh([0,0,0],radius_sphere,self.device)
-
-        # dic = {"teeth_mesh": teeth_mesh, 'center':center_mesh}
-        # for n,lm_mesh in enumerate(self.list_meshe_landmarks):
-        #     dic[str(n)] = lm_mesh
-        fig = plot_scene({"subplot1": dic},     
-            xaxis={"backgroundcolor":"rgb(200, 200, 230)"},
-            yaxis={"backgroundcolor":"rgb(230, 200, 200)"},
-            zaxis={"backgroundcolor":"rgb(200, 230, 200)"}, 
-            axis_args=AxisArgs(showgrid=True))
-            
-        fig.show()
 
 def Accuracy(agents,test_dataloader,agents_ids,min_variance,loss_function,device):
     list_distance = ({ 'obj' : [], 'distance' : [] })
@@ -565,6 +517,100 @@ def Prediction(agents,dataloader,agents_ids,min_variance,dic_patients):
     
     return dic_patients
 
+
+
+
+
+def affichage(data_loader,phong_renderer):
+    for batch, (V, F, Y, F0, CN, IP,IL) in enumerate(data_loader):
+        textures = TexturesVertex(verts_features=CN)
+        meshes = Meshes(
+            verts=V,   
+            faces=F, 
+            textures=textures
+        )
+        
+        agent = Agent(meshes,phong_renderer)
+        list_pictures = agent.shot().to(device)
+        for pictures in list_pictures:
+            plt.imshow(pictures)
+            plt.show()
+
+def pad_verts_faces(batch):
+    verts = [v for v, f, cn, lp, sc, ma  in batch]
+    faces = [f for v, f, cn, lp, sc, ma  in batch]
+    color_normals = [cn for v, f, cn, lp, sc, ma, in batch]
+    landmark_position = [lp for v, f, cn, lp, sc, ma in batch]
+    scale_factor = [sc for v, f, cn, lp , sc, ma  in batch]
+    mean_arr = [ma for v, f, cn,lp, sc, ma   in batch]
+
+    return pad_sequence(verts, batch_first=True, padding_value=0.0), pad_sequence(faces, batch_first=True, padding_value=-1), pad_sequence(color_normals, batch_first=True, padding_value=0.), landmark_position, mean_arr, scale_factor
+
+def SavePrediction(data, outpath):
+    print("Saving prediction to : ", outpath)
+    img = data.numpy()
+    output = sitk.GetImageFromArray(img)
+    writer = sitk.ImageFileWriter()
+    writer.SetFileName(outpath)
+    writer.Execute(output)
+
+def pad_verts_faces_prediction(batch):
+    verts = [v for v, f, cn, ma , sc, ps in batch]
+    faces = [f for v, f, cn, ma , sc, ps in batch]
+    color_normals = [cn for v, f, cn, ma , sc, ps in batch]
+    mean_arr = [ma for v, f, cn, ma , sc, ps  in batch]
+    scale_factor = [sc for v, f, cn, ma , sc, ps in batch]
+    path_surf = [ps for v, f, cn, ma , sc,ps in batch]
+
+    return pad_sequence(verts, batch_first=True, padding_value=0.0), pad_sequence(faces, batch_first=True, padding_value=-1), pad_sequence(color_normals, batch_first=True, padding_value=0.), mean_arr, scale_factor, path_surf
+
+
+
+
+def PlotAgentViews(view):
+    for batch in view:
+
+        if batch.shape[0] > 5:
+            row = int(math.ceil(batch.shape[0]/5)) 
+            f, axarr = plt.subplots(nrows=row,ncols=5)
+            c,r = 0,0
+            for image in batch:
+                image = image.permute(1,2,0)[:,:,:-1]
+                axarr[r,c].imshow(image)
+                c += 1
+                if c == 5:c,r = 0,r+1
+        else:
+            f, axarr = plt.subplots(nrows=1,ncols=batch.shape[0])
+            for i,image in enumerate(batch):
+                image = image.permute(1,2,0)[:,:,:-1]
+                axarr[i].imshow(image)
+        plt.show()
+
+def PlotMeshAndSpheres(meshes,sphere_pos,radius,col,device):
+    dic = {
+    "teeth_mesh": meshes,
+    }
+    # print(dic)
+    for id,pos in enumerate(sphere_pos):
+        print(pos)
+        perfect_pos = generate_sphere_mesh(pos,radius,device,col)
+        # print(perfect_pos)
+        dic[str(id)] = perfect_pos
+        # print(dic)
+    # print(dic)
+    plot_fig(dic)
+
+def plot_fig(dic):
+    fig = plot_scene({"subplot1": dic},     
+        xaxis={"backgroundcolor":"rgb(200, 200, 230)"},
+        yaxis={"backgroundcolor":"rgb(230, 200, 200)"},
+        zaxis={"backgroundcolor":"rgb(200, 230, 200)"}, 
+        axis_args=AxisArgs(showgrid=True)) 
+    fig.show()
+
+
+
+
 def GenControlePoint(groupe_data):
     lm_lst = []
     false = False
@@ -635,5 +681,3 @@ def WriteJson(lm_lst,out_path):
         json.dump(file, f, ensure_ascii=False, indent=4)
 
     f.close
-
-

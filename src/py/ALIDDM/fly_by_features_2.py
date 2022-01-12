@@ -6,6 +6,7 @@ from itk.support.extras import image
 from pytorch3d import renderer
 import torch
 from torch._C import default_generator
+from torch.functional import Tensor
 import torch.optim as optim
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -93,53 +94,69 @@ def main(args):
     for epoch in range(args.num_epoch):
         agents_ids = np.arange(args.num_agents)
         np.random.shuffle(agents_ids)
-
-        # print('-------- TRAINING --------')          
-        # print('---------- epoch :', epoch,'----------')
-        # Training(epoch=epoch, 
-        #         agents=agents, 
-        #         agents_ids=agents_ids, 
-        #         num_step=args.num_step, 
-        #         train_dataloader=train_dataloader, 
-        #         loss_function=loss_function, 
-        #         optimizer=optimizer, 
-        #         device=device, 
-        #         batch_size=args.batch_size
-        #         )
-
-        if (epoch) % args.test_interval == 0:
-            print('-------- VALIDATION --------')
-            print('---------- epoch :', epoch,'----------')
-            Validation(epoch=epoch,
-                    agents=agents,
-                    agents_ids=agents_ids,
-                    validation_dataloader=validation_dataloader,
-                    num_step=args.num_step,
-                    loss_function=loss_function,
-                    early_stopping=early_stopping,
-                    device=device
-                    )
-            if early_stopping.early_stop == True :
-                print('-------- ACCURACY --------')
-                Accuracy(agents=agents,
-                        test_dataloader=test_dataloader,
-                        agents_ids=agents_ids,
-                        min_variance = args.min_variance,
-                        loss_function=loss_function,
-                        device=device
-                        )
-
-            break
         
-        if (epoch + 1) % args.num_epoch == 0:
-            print('-------- ACCURACY --------')
-            Accuracy(agents=agents,
-                    test_dataloader=test_dataloader,
-                    agents_ids=agents_ids,
-                    min_variance = args.min_variance,
-                    loss_function=loss_function,
-                    device=device
-                    )
+        # lm_pos = torch.empty((0)).to(device)
+        
+    # for batch, (V, F, CN, LP, MR, SF) in enumerate(train_dataloader):
+    #         textures = TexturesVertex(verts_features=CN)
+    #         meshes = Meshes(
+    #             verts=V,   
+    #             faces=F, 
+    #             textures=textures
+    #         ) # batchsize
+    #         for aid in agents_ids:
+    #             for lst in LP:
+    #                 lm_pos = torch.cat((lm_pos,lst[aid].unsqueeze(0)),dim=0)  #[batchsize,3]
+    #             # lst_pos.append(LP[0][agents_ids[0]])
+    #     # print(lm_pos)
+    #     PlotMeshAndSpheres(meshes,lm_pos,0.02,[1,0,0],device)
+
+        print('-------- TRAINING --------')          
+        print('---------- epoch :', epoch,'----------')
+        Training(epoch=epoch, 
+                agents=agents, 
+                agents_ids=agents_ids, 
+                num_step=args.num_step, 
+                train_dataloader=train_dataloader, 
+                loss_function=loss_function, 
+                optimizer=optimizer, 
+                device=device, 
+                batch_size=args.batch_size
+                )
+
+        # if (epoch) % args.test_interval == 0:
+        #     print('-------- VALIDATION --------')
+        #     print('---------- epoch :', epoch,'----------')
+        #     Validation(epoch=epoch,
+        #             agents=agents,
+        #             agents_ids=agents_ids,
+        #             validation_dataloader=validation_dataloader,
+        #             num_step=args.num_step,
+        #             loss_function=loss_function,
+        #             early_stopping=early_stopping,
+        #             device=device
+        #             )
+        #     if early_stopping.early_stop == True :
+        #         print('-------- ACCURACY --------')
+        #         Accuracy(agents=agents,
+        #                 test_dataloader=test_dataloader,
+        #                 agents_ids=agents_ids,
+        #                 min_variance = args.min_variance,
+        #                 loss_function=loss_function,
+        #                 device=device
+        #                 )
+
+        #         break
+        
+        # if (epoch + 1) % args.num_epoch == 0:
+        #     print('-------- ACCURACY --------')
+        #     Accuracy(agents=agents,
+        #             test_dataloader=test_dataloader,
+        #             agents_ids=agents_ids,
+        #             min_variance = args.min_variance,
+        #             loss_function=loss_function,
+        #             device=device
+        #             )
 
 
 if __name__ == '__main__':
@@ -164,11 +181,11 @@ if __name__ == '__main__':
 
     other_param = parser.add_argument_group('other parameters')
     other_param.add_argument('--train_size',type=int, help='proportion of dat for training', default=0.9)
-    other_param.add_argument('--batch_size',type=int, help='batch size', default=4)
+    other_param.add_argument('--batch_size',type=int, help='batch size', default=1)
     other_param.add_argument('--test_interval',type=int, help='when we do a evaluation of the model', default=1)
     other_param.add_argument('--min_variance',type=float, help='minimum of variance', default=0.01)
-    other_param.add_argument('--num_agents',type=int, help=' number of agents = number of maximum of landmarks in dataset', default=1)
-    other_param.add_argument('--num_step',type=int, help='number of step before to rich the landmark position',default=3)
+    other_param.add_argument('--num_agents',type=int, help=' number of agents = number of maximum of landmarks in dataset', default=5)
+    other_param.add_argument('--num_step',type=int, help='number of step before to rich the landmark position',default=1)
     other_param.add_argument('--num_epoch',type=int,help="numero epoch", default=50)
 
 

@@ -53,15 +53,15 @@ class Agent(nn.Module):
         self.tanh = nn.Tanh() 
         # self.trainable(False)
     
-    def reset_sphere_center(self,radius=0, center_agent=0, batch_size=1, random=False):
+    def reset_sphere_center(self,radius=1, center_agent=0, batch_size=1, random=False):
         self.batch_size = batch_size
         if(random):
-            self.sphere_centers = (torch.rand(self.batch_size, 3) * radius - (radius/2) + center_agent).to(self.device)
+            self.sphere_centers = (torch.rand(self.batch_size, 3)-0.5) * 2 * radius + center_agent
             # print(self.sphere_centers)
         else:
-            self.sphere_centers = torch.zeros([self.batch_size, 3]).type(torch.float32).to(self.device)
+            self.sphere_centers = torch.zeros([self.batch_size, 3]) + center_agent
             # print(self.sphere_centers)
-   
+        self.sphere_centers = self.sphere_centers.type(torch.float32).to(self.device)
 
     def get_parameters(self):
         att_param = self.attention.parameters()
