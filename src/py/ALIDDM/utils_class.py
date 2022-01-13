@@ -395,7 +395,7 @@ class FlyByDataset(Dataset):
    
     def get_landmarks_position(self,idx, mean_arr, scale_factor, number_of_landmarks, angle, vector):
        
-        print(self.df.iloc[idx]["landmarks"])
+        # print(self.df.iloc[idx]["landmarks"])
         data = json.load(open(os.path.join(self.dataset_dir,self.df.iloc[idx]["landmarks"])))
         markups = data['markups']
         landmarks_dict = markups[0]['controlPoints']

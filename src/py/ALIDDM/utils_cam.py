@@ -157,112 +157,151 @@ def merge_meshes(agents,V,F,CN,device):
 
 
 
-
-
-def Training(epoch, agents, agents_ids, num_step, train_dataloader, loss_function, optimizer, device, batch_size):#interval = 5
-    # for batch, (V, F, CN, LP, MR, SF) in enumerate(train_dataloader):
-        
+def Training(epoch, agents, agents_ids, num_step, train_dataloader, loss_function, optimizer, device, batch_size):
     torch.autograd.set_detect_anomaly(True)
-    #Gravitational law F = G * (m_1*m_2/r^2)
-    # G = torch.tensor(6.67408)#e-11 #gravitational constant
-    # m_1 = torch.tensor(1.98)#e30 #kg mass of the sun
-    # m_2 = torch.tensor(0.000005972)#e30 #kg mass of the earth
-
-    epsilon = torch.tensor(1e-10)
-    discount_factor = torch.tensor(0.8)
-    
-    # if (epoch) % interval == 0:
-    #     RADIUS = torch.tensor(0.5).cpu()
-    # else :
-    #     RADIUS = torch.tensor(1).cpu()
-
     for batch, (V, F, CN, LP, MR, SF) in enumerate(train_dataloader):
-        # textures = TexturesVertex(verts_features=CN)
-        # print(CN.shape)
-        # meshes = Meshes(
-        #     verts=V,   
-        #     faces=F, 
-        #     textures=textures
-        # )
-        # batchsize
-        
-        # batch_loss = 0
-
-        batch_g_force = 0
-        optimizer.zero_grad()
-        
+        print('---------- num batch :', batch ,'----------')
         for aid in agents_ids: #aid == idlandmark_id
             print('---------- agents id :', aid,'----------')
+            
             lm_pos = torch.empty((0)).to(device)
             for lst in LP:
                 lm_pos = torch.cat((lm_pos,lst[aid].unsqueeze(0)),dim=0)
             
-            # if (epoch) % interval == 0:
-            #     center_agent = torch.empty((0)).to(device)
-            #     for lst in LP:
-            #         center_agent = lm_pos
-            # else :
-            center_agent = torch.zeros([batch_size, 3]).type(torch.float32).to(device)
-            center_agent = center_agent.cpu()
+            center_agent = torch.zeros([batch_size, 3]).type(torch.float32).cpu()
             agents[aid].reset_sphere_center(radius=agents[aid].radius,center_agent=center_agent, batch_size=V.shape[0], random=True)
 
             NSteps = num_step
-            A_i_gforce = 0
+            aid_loss = 0
+        
+            agents[aid].trainable(True)
+            agents[aid].train()
 
-            # agents[aid].trainable(True)
-            # agents[aid].train()
-            for radius in [1.5,0.8,0.5]:  
-                agents[aid].set_rad(torch.tensor(radius))
-                # print(agents[aid].radius) 
+            for i in range(NSteps):
+                print('---------- step :', i,'----------')
 
-                for i in range(NSteps):
-                    print('---------- step :', i,'----------')
-                    # print(agents[aid].sphere_centers)
-         
-                    meshes = merge_meshes(agents[aid],V,F,CN,device)
+                optimizer.zero_grad()   # prepare the gradients for this step's back propagation
+                
+                meshes = merge_meshes(agents[aid],V,F,CN,device)
 
-                    # dic = {"teeth_mesh": meshes}
-                    # plot_fig(dic)
-                    x , img_batch = agents[aid](meshes)  #[batchsize,time_steps,3,224,224]
-                    
-                    PlotMeshAndSpheres(meshes,agents[aid].sphere_centers,0.02,[1,0,0])
-                    PlotAgentViews(img_batch)
-
-                    x = x + agents[aid].sphere_centers
-                    #f_i = G*m_1*m_2/(loss_function(x, lm_pos) + epsilon) 
-                    f_i = 1.0/(loss_function(x, lm_pos) + epsilon) 
-                    A_i_gforce = A_i_gforce + f_i*torch.pow(discount_factor, i)
-                    
-                    agents[aid].sphere_centers = x
-
+                x , img_batch = agents[aid](meshes)  #[batchsize,time_steps,3,224,224]
+                
+                x = x + agents[aid].sphere_centers
+                
+                agents[aid].sphere_centers = x.clone().detach()
             
-            print(f"agent {aid} force:", A_i_gforce.item())
-            batch_g_force = batch_g_force + A_i_gforce
-         
-        agents[aid].writer.add_scalar('force', batch_g_force, epoch)
-        batch_g_force = -1*batch_g_force # maximize
-        batch_g_force.backward()   # backward propagation
-        optimizer.step()   # tell the optimizer to update the weights according to the gradients and its internal optimisation strategy 
+            aid_loss = torch.sqrt(loss_function(x, lm_pos))
+            aid_loss.backward()   # backward propagation
+            optimizer.step()   # tell the optimizer to update the weights according to the gradients and its internal optimisation strategy
+        
+            l = aid_loss.item()
+            print(f"agent {aid} loss:", l)
+           
+            agents[aid].trainable(False)
+            agents[aid].writer.add_scalar('distance',l,epoch)
 
-            #     batch_loss += aid_loss
+
+# def Training(epoch, agents, agents_ids, num_step, train_dataloader, loss_function, optimizer, device, batch_size):#interval = 5
+#     # for batch, (V, F, CN, LP, MR, SF) in enumerate(train_dataloader):
+        
+#     torch.autograd.set_detect_anomaly(True)
+#     #Gravitational law F = G * (m_1*m_2/r^2)
+#     # G = torch.tensor(6.67408)#e-11 #gravitational constant
+#     # m_1 = torch.tensor(1.98)#e30 #kg mass of the sun
+#     # m_2 = torch.tensor(0.000005972)#e30 #kg mass of the earth
+
+#     epsilon = torch.tensor(1e-10)
+#     discount_factor = torch.tensor(0.8)
+    
+#     # if (epoch) % interval == 0:
+#     #     RADIUS = torch.tensor(0.5).cpu()
+#     # else :
+#     #     RADIUS = torch.tensor(1).cpu()
+
+#     for batch, (V, F, CN, LP, MR, SF) in enumerate(train_dataloader):
+#         # textures = TexturesVertex(verts_features=CN)
+#         # print(CN.shape)
+#         # meshes = Meshes(
+#         #     verts=V,   
+#         #     faces=F, 
+#         #     textures=textures
+#         # )
+#         # batchsize
+        
+#         # batch_loss = 0
+
+#         batch_g_force = 0
+#         optimizer.zero_grad()
+        
+#         for aid in agents_ids: #aid == idlandmark_id
+#             print('---------- agents id :', aid,'----------')
+#             lm_pos = torch.empty((0)).to(device)
+#             for lst in LP:
+#                 lm_pos = torch.cat((lm_pos,lst[aid].unsqueeze(0)),dim=0)
             
-            # batch_loss /= len(agents_ids)
-            # writer.add_scalar('distance',batch_loss)
+#             # if (epoch) % interval == 0:
+#             #     center_agent = torch.empty((0)).to(device)
+#             #     for lst in LP:
+#             #         center_agent = lm_pos
+#             # else :
+#             center_agent = torch.zeros([batch_size, 3]).type(torch.float32).to(device)
+#             center_agent = center_agent.cpu()
+#             agents[aid].reset_sphere_center(radius=agents[aid].radius,center_agent=center_agent, batch_size=V.shape[0], random=True)
+
+#             NSteps = num_step
+#             A_i_gforce = 0
+
+#             # agents[aid].trainable(True)
+#             # agents[aid].train()
+#             for radius in [1.5,0.8,0.5]:  
+#                 agents[aid].set_rad(torch.tensor(radius))
+#                 # print(agents[aid].radius) 
+
+#                 for i in range(NSteps):
+#                     print('---------- step :', i,'----------')
+#                     # print(agents[aid].sphere_centers)
+                    
+#                     meshes = merge_meshes(agents[aid],V,F,CN,device)
+
+#                     # dic = {"teeth_mesh": meshes}
+#                     # plot_fig(dic)
+#                     x , img_batch = agents[aid](meshes)  #[batchsize,time_steps,3,224,224]
+                    
+#                     # PlotMeshAndSpheres(meshes,agents[aid].sphere_centers,0.02,[1,0,0],device)
+#                     # PlotAgentViews(img_batch)
+
+#                     x = x + agents[aid].sphere_centers
+#                     #f_i = G*m_1*m_2/(loss_function(x, lm_pos) + epsilon) 
+#                     # f_i = 1.0/(loss_function(x, lm_pos) + epsilon) 
+#                     # A_i_gforce = A_i_gforce + f_i*torch.pow(discount_factor, i)
+                    
+#                     agents[aid].sphere_centers = x
+
+#             # print(f"agent {aid} force:", A_i_gforce.item())
+#             # batch_g_force = batch_g_force + A_i_gforce
+         
+#         # agents[aid].writer.add_scalar('force', batch_g_force, epoch)
+#         # batch_g_force = -1*batch_g_force # maximize
+#         # batch_g_force.backward()   # backward propagation
+#         # optimizer.step()   # tell the optimizer to update the weights according to the gradients and its internal optimisation strategy 
+
+#             #     batch_loss += aid_loss
+            
+#             # batch_loss /= len(agents_ids)
+#             # writer.add_scalar('distance',batch_loss)
         
 def Validation(epoch,agents,agents_ids,validation_dataloader,num_step,loss_function,early_stopping,device):
     with torch.no_grad():
-
-        running_loss = 0
-
+        final_loss = 0
         for batch, (V, F, CN, LP, MR, SF) in enumerate(validation_dataloader):
+            print('---------- num batch:', batch,'----------')
             # textures = TexturesVertex(verts_features=CN)
             # meshes = Meshes(
             #     verts=V,   
             #     faces=F, 
             #     textures=textures
             # )
-            batch_loss = 0
-
+            
             for aid in agents_ids: #aid == idlandmark_id
                 agents[aid].reset_sphere_center(batch_size = V.shape[0])
                 print('---------- agents id :', aid,'----------')
@@ -272,44 +311,40 @@ def Validation(epoch,agents,agents_ids,validation_dataloader,num_step,loss_funct
                     lm_pos = torch.cat((lm_pos,lst[aid].unsqueeze(0)),dim=0)
 
                 NSteps = num_step
-                for radius in [1.5,0.8,0.5]:
-                    agents[aid].set_rad(radius)
-                    print(agents[aid].radius)
+                agents[aid].eval()
+
+                # for radius in [1.5,0.8,0.5]:
+                #     agents[aid].set_rad(radius)
+                #     print(agents[aid].radius)
                     
-                    for i in range(NSteps):
-                        print('---------- step :', i,'----------')
-                        meshes = merge_meshes(agents[aid],V,F,CN,device)
+                for i in range(NSteps):
+                    print('---------- step :', i,'----------')
+                    
+                    meshes = merge_meshes(agents[aid],V,F,CN,device)
 
-                        x , img_batch = agents[aid](meshes)  #[batchsize,time_steps,3,224,224]
-                        
-                        # delta_pos =  x[...,0:3]
-                        
-                        # delta_pos += agents[aid].sphere_centers
-                        
-                        # # agents[aid].set_radius(x[...,3:4].clone().detach())
+                    x , img_batch = agents[aid](meshes)  #[batchsize,time_steps,3,224,224]
+                    
+                    x = x + agents[aid].sphere_centers
+                    
+                    agents[aid].sphere_centers = x.clone().detach()
 
-                        # agents[aid].sphere_centers = delta_pos.detach().clone()
-                        x = x + agents[aid].sphere_centers
-                        agents[aid].sphere_centers = x.clone().detach()
+                    # delta_pos =  x[...,0:3]
+                    # delta_pos += agents[aid].sphere_centers
+                    # # agents[aid].set_radius(x[...,3:4].clone().detach())
+                    # agents[aid].sphere_centers = delta_pos.detach().clone()
 
                 image_display = img_batch[0,:,:-1,:,:]
                 agents[aid].image_writer.add_images('image',image_display,epoch)
 
-                aid_loss = loss_function(x, lm_pos)
-                
-                batch_loss += aid_loss
-
+                aid_loss = torch.sqrt(loss_function(x, lm_pos))
                 print(f"agent {aid} loss:", aid_loss.item())
-                
                 agents[aid].writer.add_scalar('Validation',aid_loss,epoch)
-
-            running_loss += batch_loss
-
-            # early_stopping(running_loss, agents)
+                final_loss += aid_loss 
             
+            # early_stopping(running_loss, agents)
             # return early_stopping.early_stop
-        early_stopping(running_loss, agents)
-
+        final_loss /= batch
+        early_stopping(final_loss, agents)
         return early_stopping.early_stop
                 
             # if aid_loss<agents[aid].best_loss:
@@ -392,7 +427,6 @@ def Validation(epoch,agents,agents_ids,validation_dataloader,num_step,loss_funct
 
 def Accuracy(agents,test_dataloader,agents_ids,min_variance,loss_function,device):
     list_distance = ({ 'obj' : [], 'distance' : [] })
-
     with torch.no_grad():
         for batch, (V, F, CN, LP, MR, SF) in enumerate(test_dataloader):
             groupe_data = {}
@@ -405,9 +439,8 @@ def Accuracy(agents,test_dataloader,agents_ids,min_variance,loss_function,device
             )
        
             for aid in agents_ids: #aid == idlandmark_id
-                print('---------- agents id :', aid,'----------')
+                print('---------- agents id :', aid ,'----------')
                 agents[aid].reset_sphere_center(V.shape[0])
-                
                 agents[aid].eval() 
                 pos_center = agents[aid].search(meshes,min_variance) #[batchsize,3]
                 # plot_fig(meshes,center_mesh)
@@ -424,7 +457,6 @@ def Accuracy(agents,test_dataloader,agents_ids,min_variance,loss_function,device
                     dic[str(index)]=center_mesh
 
                 plot_fig(dic)
-                
                 
                 for i in range(V.shape[0]):
                     # loss = torch.sqrt(loss_function(pos_center[i], lm_pos[i]))
